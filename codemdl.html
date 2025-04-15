@@ -1,0 +1,378 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.4">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="zh-TW"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;史詩級！1812序曲煙火交響秀 (60秒循環)&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>canvas { display: block; background-color: #000; }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>#sound-prompt {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>position: fixed; top: 0; left: 0; width: 100%; height: 100%;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>background: rgba(0,0,0,0.75); color: white; display: flex;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>justify-content: center; align-items: center; font-size: 2em;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>text-align: center; padding: 20px; box-sizing: border-box;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>cursor: pointer; z-index: 10;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;div id="sound-prompt"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>🎆&lt;br&gt;點擊螢幕任何地方&lt;br&gt;開啟聲音並開始煙火交響秀！</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;canvas id="fireworksCanvas"&gt;&lt;/canvas&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- 聲音檔案 --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- *** 非常重要：確認 src 路徑和檔名跟你上傳的一樣！*** --&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;audio id="bgMusic" src="audio/1812by105.mp3" preload="auto" loop&gt;&lt;/audio&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;audio id="fireworksSfxLoop" src="audio/190700bycut.mp3" preload="auto" loop&gt;&lt;/audio&gt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;script&gt;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const canvas = document.getElementById('fireworksCanvas');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const ctx = canvas.getContext('2d');</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let activeFireworks = [];</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let vw, vh;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let mainLoopTimer = 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let sequenceIndex = 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let lastTime = 0;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 聲音相關變數 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let bgMusic;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let fireworksSfxLoop; // 用來控制煙火音效循環</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let soundEnabled = false;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let soundPrompt;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 核心設定 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const sequenceDuration = 60000;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const targetFireworksPerSequence = 800;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const gravity = 0.03;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const friction = 0.98;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const trailLength = 8;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 顏色庫 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const colors = [ /* ... 省略，顏色列表和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'#FF4848', '#FF7648', '#FFA548', '#FFD048', '#FFFF48',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'#48FFFF', '#48D1FF', '#48A5FF', '#4876FF', '#4848FF', '#7648FF',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'#48FF48', '#48FF76', '#48FFA5', '#48FFD1',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'#FF48FF', '#FF48D1', '#FF48A5', '#D148FF', '#A548FF',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'#FFFFFF', '#F0F0F0', '#FFD700'</p>
+<p class="p1"><span class="Apple-converted-space">        </span>];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 煙火類型 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>const fireworkTypes = [ /* ... 省略，類型列表和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'sphere_mono', 'sphere_multi', 'sphere_rainbow',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'willow_gold', 'willow_multi',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'glitter_fast', 'glitter_dense',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'strobe_mono', 'strobe_multi',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'ring_simple',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'burst_directional',</p>
+<p class="p1"><span class="Apple-converted-space">            </span>'sphere_compact', 'sphere_large'</p>
+<p class="p1"><span class="Apple-converted-space">        </span>];</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 預生成序列 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let fireworkSequence = [];</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function generateSequence() { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">            </span>console.log("Generating 60s firework sequence...");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>fireworkSequence = [];</p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (!vw || !vh) { resizeCanvas(); }</p>
+<p class="p1"><span class="Apple-converted-space">            </span>for (let i = 0; i &lt; targetFireworksPerSequence; i++) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const launchTime = Math.random() * sequenceDuration;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const xPos = random(0.1, 0.9);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const type = fireworkTypes[Math.floor(Math.random() * fireworkTypes.length)];</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const launchSpeed = random(-12, -16);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const targetHeightFactor = random(0.15, 0.5);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>fireworkSequence.push({</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>time: launchTime, x: xPos, type: type,</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>launchSpeed: launchSpeed, targetHeightFactor: targetHeightFactor</p>
+<p class="p1"><span class="Apple-converted-space">                </span>});</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>fireworkSequence.sort((a, b) =&gt; a.time - b.time);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>console.log(`Generated ${fireworkSequence.length} firework events.`);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>sequenceIndex = 0;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 輔助函數 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function random(min, max) { /* ... 省略 ... */ return Math.random() * (max - min) + min; }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function randomInt(min, max) { /* ... 省略 ... */ return Math.floor(random(min, max + 1)); }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function randomColor(palette = colors) { /* ... 省略 ... */ return palette[Math.floor(Math.random() * palette.length)]; }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function getColors(type) { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">             </span>let count = randomInt(1,3);</p>
+<p class="p1"><span class="Apple-converted-space">             </span>let palette = colors;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (type.includes('mono')) count = 1;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (type.includes('multi')) count = randomInt(2, 4);</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (type.includes('rainbow')) return ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#8B00FF'];</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (type.includes('gold')) return ['#FFD700', '#FFA500', '#F0E68C'];</p>
+<p class="p1"><span class="Apple-converted-space">             </span>const shuffled = palette.slice().sort(() =&gt; 0.5 - Math.random());</p>
+<p class="p1"><span class="Apple-converted-space">             </span>return shuffled.slice(0, count);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 粒子類別 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>class Particle { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">             </span>constructor(x, y, vx, vy, color, life, particleType = 'normal', options = {}) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.color = color;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.initialLife = life &gt; 0 ? life : 0.1; this.life = this.initialLife; this.alpha = 1;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.type = particleType; this.gravity = gravity * (options.gravityFactor || 1);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.friction = options.friction || friction; this.strobeRate = options.strobeRate || 0.1;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.strobeIntensity = options.strobeIntensity || 0.5; this.radius = options.radius || random(1.5, 2.5);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.decay = random(0.01, 0.02) * (options.decayRate || 1);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (this.decay * (16.67) &gt;= this.life) { this.decay = this.life / 20 ; }</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>update(deltaTime) { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>if (isNaN(deltaTime) || deltaTime &lt;= 0) deltaTime = 16.67;</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>const dt = deltaTime / 16.67;</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.x += this.vx * dt; this.y += this.vy * dt; this.vy += this.gravity * dt;</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.vx *= Math.pow(this.friction, dt); this.vy *= Math.pow(this.friction, dt);</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.life -= this.decay * dt;</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>if (this.type === 'strobe') { /* ... strobe alpha logic ... */</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>if (Math.random() &lt; this.strobeRate) { this.alpha = random(1 - this.strobeIntensity, 1); }</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>else { const baseAlpha = this.initialLife &gt; 0 ? Math.max(0, this.life / (this.initialLife * 0.5)) : 0; this.alpha = baseAlpha; }</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>this.alpha = Math.max(0, Math.min(1, this.alpha));</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>} else { this.alpha = this.initialLife &gt; 0 ? Math.max(0, this.life / this.initialLife) : 0; }</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.alpha = Math.max(0, this.alpha);</p>
+<p class="p1"><span class="Apple-converted-space">             </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>draw() { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>ctx.globalAlpha = this.alpha; ctx.fillStyle = this.color; ctx.beginPath();</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>ctx.arc(this.x, this.y, this.radius * this.alpha + 0.5, 0, Math.PI * 2); ctx.fill();</p>
+<p class="p1"><span class="Apple-converted-space">             </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>shouldRemove() { /* ... 省略，內容和之前一樣 ... */ return this.life &lt;= 0 || this.alpha &lt;= 0.01; }</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 煙火類別 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>class Firework {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>constructor(startX, targetY, launchSpeed, type) { // *** 注意：接收的是計算好的 targetY ***</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.startX = startX;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.targetHeight = targetY; // 直接使用傳入的絕對高度</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.type = type;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.exploded = false;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.particles = [];</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.rocket = { x: startX, y: vh, vx: random(-1, 1), vy: launchSpeed, alpha: 1, color: 'rgba(255,255,255,0.5)' };</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.trailParticles = [];</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.explosionParams = this.getExplosionParams(type);</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.explosionColors = getColors(type);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>getExplosionParams(type) { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                </span>let params = { /* ... defaults ... */ count: randomInt(80, 150), speed: random(3, 8), life: random(0.8, 1.8), particleType: 'normal', gravityFactor: 1, radius: random(1.5, 2.5), decayRate: 1, shape: 'sphere', angleRange: [0, Math.PI * 2] };</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (type.includes('willow')) { /* ... */ params.count = randomInt(60, 120); params.speed = random(1, 4); params.life = random(2.0, 3.5); params.gravityFactor = 1.2; params.decayRate = 0.8; params.radius = random(1, 2); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>else if (type.includes('glitter')) { /* ... */ params.count = randomInt(150, 300); params.speed = random(4, 9); params.life = random(0.3, 0.8); params.decayRate = 1.5; params.radius = random(0.8, 1.5); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>else if (type.includes('strobe')) { /* ... */ params.particleType = 'strobe'; params.life = random(0.6, 1.5); params.strobeRate = 0.2; params.strobeIntensity = 0.6; }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>else if (type.includes('ring')) { /* ... */ params.shape = 'ring'; const ringStart = Math.random() * Math.PI * 2; const ringWidth = random(Math.PI * 0.1, Math.PI * 0.3); params.angleRange = [ringStart, ringStart + ringWidth]; params.count = randomInt(100, 180); params.speed = random(4, 7); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>else if (type.includes('directional')) { /* ... */ params.shape = 'directional'; const direction = Math.random() * Math.PI * 2; const spread = random(Math.PI * 0.3, Math.PI * 0.8); params.angleRange = [direction - spread / 2, direction + spread / 2]; params.speed = random(6, 11); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if(type.includes('compact')) { /* ... */ params.speed = random(2, 5); params.life = random(0.6, 1.2); params.count = randomInt(60,100); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if(type.includes('large')) { /* ... */ params.speed = random(5, 10); params.life = random(1.5, 2.5); params.count = randomInt(120, 200); }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>return params;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>update(deltaTime) { // *** 內容不變，但不再需要從這裡觸發音效 ***</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const dt = deltaTime / 16.67;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (!this.exploded) {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>this.rocket.x += this.rocket.vx * dt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>this.rocket.y += this.rocket.vy * dt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>this.rocket.vy += gravity * dt;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if(Math.random() &lt; 0.5) { /* ... trail particle push ... */ this.trailParticles.push(new Particle( this.rocket.x, this.rocket.y, random(-0.3, 0.3), random(-0.3, 0.3), this.rocket.color, random(0.3, 0.7), 'normal', { radius: 1.5, decayRate: 1.8 } )); }</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (this.rocket.y &lt;= this.targetHeight || this.rocket.vy &gt;= -1) {</p>
+<p class="p1"><span class="Apple-converted-space">                        </span>this.explode(); // 只觸發視覺爆炸</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.particles.forEach((p, i) =&gt; { p.update(deltaTime); if (p.shouldRemove()) this.particles.splice(i, 1); });</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>this.trailParticles.forEach((p, i) =&gt; { p.update(deltaTime); if (p.shouldRemove()) this.trailParticles.splice(i, 1); });</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>explode() { // *** 不再需要播放音效的程式碼 ***</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (this.exploded) return;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.exploded = true;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.rocket.alpha = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const explosionX = this.rocket.x;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const explosionY = this.rocket.y;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>const params = this.explosionParams;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>for (let i = 0; i &lt; params.count; i++) { /* ... 原本的粒子生成邏輯 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>let angle; /* ... calculate angle ... */</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>if (params.shape === 'sphere') { angle = Math.random() * Math.PI * 2; } else if (params.shape === 'ring') { angle = params.angleRange[0] + Math.random() * (params.angleRange[1] - params.angleRange[0]); /* ... wrap around logic ... */ } else if (params.shape === 'directional') { angle = params.angleRange[0] + Math.random() * (params.angleRange[1] - params.angleRange[0]); } else { angle = Math.random() * Math.PI * 2; }</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>const speed = random(0.5, 1.0) * params.speed * (Math.random() &gt; 0.9 ? 1.5 : 1);</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>const vx = Math.cos(angle) * speed; const vy = Math.sin(angle) * speed;</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>const color = this.explosionColors.length &gt; 0 ? this.explosionColors[i % this.explosionColors.length] : randomColor();</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>const life = random(0.8, 1.2) * params.life;</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>this.particles.push(new Particle( explosionX, explosionY, vx, vy, color, life, params.particleType, { /* ... options ... */ gravityFactor: params.gravityFactor, radius: params.radius, decayRate: params.decayRate, strobeRate: params.strobeRate, strobeIntensity: params.strobeIntensity } ));</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>this.trailParticles.forEach(p =&gt; { p.life *= 0.5; });</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>draw() { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>ctx.globalAlpha = 0.6; this.trailParticles.forEach(p =&gt; p.draw());</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>ctx.globalAlpha = 1; this.particles.forEach(p =&gt; p.draw()); ctx.globalAlpha = 1;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>shouldRemove() { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>return this.exploded &amp;&amp; this.particles.length === 0 &amp;&amp; this.trailParticles.length === 0;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 主動畫循環 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function animate(currentTime) {</p>
+<p class="p1"><span class="Apple-converted-space">             </span>requestAnimationFrame(animate);</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (!lastTime) lastTime = currentTime;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>const deltaTime = currentTime - lastTime;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>lastTime = currentTime;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (isNaN(deltaTime) || deltaTime &lt;= 0 || deltaTime &gt; 100) { return; }</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (soundEnabled) { // *** 聲音啟用後才計時和發射 ***</p>
+<p class="p1"><span class="Apple-converted-space">                </span>mainLoopTimer += deltaTime;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// 檢查循環重置</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (mainLoopTimer &gt;= sequenceDuration) {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>console.log("循環播放...");</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>mainLoopTimer %= sequenceDuration;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>sequenceIndex = 0;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                    </span>// *** 重置兩種聲音的時間 ***</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (bgMusic) {</p>
+<p class="p1"><span class="Apple-converted-space">                         </span>try { bgMusic.currentTime = 0; if(bgMusic.paused){bgMusic.play();} }</p>
+<p class="p1"><span class="Apple-converted-space">                         </span>catch (e) { console.warn("無法重置背景音樂:", e); }</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (fireworksSfxLoop) {</p>
+<p class="p1"><span class="Apple-converted-space">                         </span>try { fireworksSfxLoop.currentTime = 0; if(fireworksSfxLoop.paused){fireworksSfxLoop.play();} }</p>
+<p class="p1"><span class="Apple-converted-space">                         </span>catch (e) { console.warn("無法重置煙火音效:", e); }</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">                </span>// --- 發射煙火 ---</p>
+<p class="p1"><span class="Apple-converted-space">                </span>while (sequenceIndex &lt; fireworkSequence.length &amp;&amp; fireworkSequence[sequenceIndex].time &lt;= mainLoopTimer) {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>const event = fireworkSequence[sequenceIndex];</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>const xPos = event.x * vw;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>const targetY = vh * event.targetHeightFactor; // 計算絕對高度</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (xPos &gt; 0 &amp;&amp; xPos &lt; vw) {</p>
+<p class="p1"><span class="Apple-converted-space">                         </span>activeFireworks.push(new Firework(xPos, targetY, event.launchSpeed, event.type)); // 傳入 targetY</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>sequenceIndex++;</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>} // &lt;--- soundEnabled 判斷結束</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// --- 繪圖 ---</p>
+<p class="p1"><span class="Apple-converted-space">            </span>ctx.fillStyle = `rgba(0, 0, 0, ${trailLength / 100})`;</p>
+<p class="p1"><span class="Apple-converted-space">            </span>ctx.globalCompositeOperation = 'source-over';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>ctx.fillRect(0, 0, vw, vh);</p>
+<p class="p1"><span class="Apple-converted-space">            </span>ctx.globalCompositeOperation = 'lighter';</p>
+<p class="p1"><span class="Apple-converted-space">            </span>for (let i = activeFireworks.length - 1; i &gt;= 0; i--) {</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>activeFireworks[i].update(deltaTime); activeFireworks[i].draw();</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>if (activeFireworks[i].shouldRemove()) { activeFireworks.splice(i, 1); }</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p1"><span class="Apple-converted-space">            </span>ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 初始化聲音 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function initAudio() {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>soundPrompt = document.getElementById('sound-prompt');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>bgMusic = document.getElementById('bgMusic');</p>
+<p class="p1"><span class="Apple-converted-space">            </span>fireworksSfxLoop = document.getElementById('fireworksSfxLoop'); // 取得煙火音效元素</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (bgMusic) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>bgMusic.volume = 1.0; // 背景音樂音量最大</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>console.log("背景音樂元素找到，音量設定為 1.0");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.error("找不到背景音樂元素 #bgMusic");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>if (fireworksSfxLoop) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>fireworksSfxLoop.volume = 1.0; // 煙火音效音量最大</p>
+<p class="p1"><span class="Apple-converted-space">                 </span>console.log("煙火音效元素找到，音量設定為 1.0");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.error("找不到煙火音效元素 #fireworksSfxLoop");</p>
+<p class="p1"><span class="Apple-converted-space">            </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">            </span>// 監聽點擊以啟用聲音</p>
+<p class="p1"><span class="Apple-converted-space">            </span>soundPrompt.addEventListener('click', enableSound, { once: true });</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 啟用聲音的函數 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function enableSound() {</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (soundEnabled) return;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>console.log("聲音已由使用者互動啟用。");</p>
+<p class="p1"><span class="Apple-converted-space">             </span>soundEnabled = true;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>soundPrompt.style.display = 'none';</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">             </span>// *** 嘗試同時播放兩種聲音 ***</p>
+<p class="p1"><span class="Apple-converted-space">             </span>const playPromises = []; // 用來收集播放的 Promise</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (bgMusic) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>playPromises.push(bgMusic.play());</p>
+<p class="p1"><span class="Apple-converted-space">             </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>if (fireworksSfxLoop) {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>playPromises.push(fireworksSfxLoop.play());</p>
+<p class="p1"><span class="Apple-converted-space">             </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">             </span>// 等待所有聲音都嘗試開始播放後，再同步計時器</p>
+<p class="p1"><span class="Apple-converted-space">             </span>Promise.all(playPromises)</p>
+<p class="p1"><span class="Apple-converted-space">                </span>.then(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>console.log("背景音樂和煙火音效嘗試開始播放。");</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>// 聲音成功開始 (或嘗試開始) 後，重置計時器</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>mainLoopTimer = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>sequenceIndex = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>lastTime = performance.now(); // 使用 performance.now() 獲取更精確的起始時間</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>console.log("主循環計時器已重置與聲音同步。");</p>
+<p class="p1"><span class="Apple-converted-space">                </span>})</p>
+<p class="p1"><span class="Apple-converted-space">                </span>.catch(e =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>// 即使有錯誤也要重置計時器，避免完全卡住</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>console.error("至少一個聲音播放失敗:", e);</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>mainLoopTimer = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>sequenceIndex = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>lastTime = performance.now();</p>
+<p class="p1"><span class="Apple-converted-space">                     </span>console.warn("儘管聲音播放失敗，主循環計時器仍已重置。");</p>
+<p class="p1"><span class="Apple-converted-space">                </span>});</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 重設畫布大小函數 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function resizeCanvas() { /* ... 省略，內容和之前一樣 ... */</p>
+<p class="p1"><span class="Apple-converted-space">             </span>vw = canvas.width = window.innerWidth;</p>
+<p class="p1"><span class="Apple-converted-space">             </span>vh = canvas.height = window.innerHeight;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 初始化設定 ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>function setup() {</p>
+<p class="p1"><span class="Apple-converted-space">             </span>resizeCanvas();</p>
+<p class="p1"><span class="Apple-converted-space">             </span>generateSequence();</p>
+<p class="p1"><span class="Apple-converted-space">             </span>initAudio(); // 初始化聲音</p>
+<p class="p1"><span class="Apple-converted-space">             </span>requestAnimationFrame(animate); // 啟動繪圖循環</p>
+<p class="p1"><span class="Apple-converted-space">             </span>console.log("設定完成，等待使用者互動以啟用聲音。");</p>
+<p class="p1"><span class="Apple-converted-space">        </span>}</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// --- 事件監聽 (窗口大小改變) ---</p>
+<p class="p1"><span class="Apple-converted-space">        </span>let resizeTimeout;</p>
+<p class="p1"><span class="Apple-converted-space">        </span>window.addEventListener('resize', () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">            </span>clearTimeout(resizeTimeout);</p>
+<p class="p1"><span class="Apple-converted-space">             </span>resizeTimeout = setTimeout(() =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">                </span>console.log("窗口大小改變 - 重新生成序列...");</p>
+<p class="p1"><span class="Apple-converted-space">                </span>resizeCanvas();</p>
+<p class="p1"><span class="Apple-converted-space">                </span>generateSequence();</p>
+<p class="p1"><span class="Apple-converted-space">                </span>if (soundEnabled) { // 只有聲音啟用後才重置計時器和聲音</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>mainLoopTimer = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>lastTime = performance.now();</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>sequenceIndex = 0;</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (bgMusic &amp;&amp; !bgMusic.paused) { bgMusic.currentTime = 0; }</p>
+<p class="p1"><span class="Apple-converted-space">                    </span>if (fireworksSfxLoop &amp;&amp; !fireworksSfxLoop.paused) { fireworksSfxLoop.currentTime = 0; }</p>
+<p class="p1"><span class="Apple-converted-space">                </span>}</p>
+<p class="p1"><span class="Apple-converted-space">             </span>}, 500);</p>
+<p class="p1"><span class="Apple-converted-space">        </span>});</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">        </span>// 啟動！</p>
+<p class="p1"><span class="Apple-converted-space">        </span>setup();</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>
