@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>史詩級！1812序曲煙火交響秀 (60秒循環)</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; }
+        canvas { display: block; background-color: #000; }
+        #sound-prompt {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.75); color: white; display: flex;
+            justify-content: center; align-items: center; font-size: 2em;
+            text-align: center; padding: 20px; box-sizing: border-box;
+            cursor: pointer; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sound-prompt">
+        🎆<br>點擊螢幕任何地方<br>開啟聲音並開始煙火交響秀！
+    </div>
+
+    <!-- 聲音檔案 -->
+    <!-- *** 非常重要：把下面 src 引號裡的檔名改成你 GitHub audio 資料夾裡的真實檔名！*** -->
+    <audio id="bgMusic" src="audio/tchaikovsky-1812.mp3" preload="auto" loop></audio>
+    <audio id="fireworksSfxLoop" src="audio/fireworks-sfx.mp3" preload="auto" loop></audio>
+    <!-- ************************************************************************** -->
+
+    <canvas id="fireworksCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('fireworksCanvas');
+        // *** 如果上面找不到 canvas，這裡就會出錯！ ***
+        if (!canvas) {
+            console.error("錯誤：找不到 ID 為 'fireworksCanvas' 的 <canvas> 元素！請檢查 HTML。");
+        }
+        const ctx = canvas ? canvas.getContext('2d') : null; // 加上檢查，避免 canvas 不存在時出錯
+        let activeFireworks = [];
+        let vw, vh;
+        let mainLoopTimer = 0;
+        let sequenceIndex = 0;
+        let lastTime = 0;
+
+        // --- 聲音相關變數 ---
+        let bgMusic;
+        let fireworksSfxLoop;
+        let soundEnabled = false;
+        let soundPrompt;
+
+        // --- 核心設定 ---
+        const sequenceDuration = 60000;
+        const targetFireworksPerSequence = 800;
+        const gravity = 0.03;
+        const friction = 0.98;
+        const trailLength = 8;
+
+        // --- 顏色庫 ---
+        const colors = [
+            '#FF4848', '#FF7648', '#FFA548', '#FFD048', '#FFFF48', '#48FFFF', '#48D1FF',
+            '#48A5FF', '#4876FF', '#4848FF', '#7648FF', '#48FF48', '#48FF76', '#48FFA5',
+            '#48FFD1', '#FF48FF', '#FF48D1', '#FF48A5', '#D148FF', '#A548FF', '#FFFFFF',
+            '#F0F0F0', '#FFD700'
+        ];
+
+        // --- 煙火類型 ---
+        const fireworkTypes = [
+            'sphere_mono', 'sphere_multi', 'sphere_rainbow', 'willow_gold', 'willow_multi',
+            'glitter_fast', 'glitter_dense', 'strobe_mono', 'strobe_multi', 'ring_simple',
+            'burst_directional', 'sphere_compact', 'sphere_large'
+        ];
+
+        // --- 預生成序列 ---
+        let fireworkSequence = [];
+        function generateSequence() {
+            console.log("Generating 60s firework sequence...");
+            fireworkSequence = [];
+            if (!vw || !vh) { resizeCanvas(); }
+            for (let i = 0; i < targetFireworksPerSequence; i++) {
+                const launchTime = Math.random() * sequenceDuration;
+                const xPos = random(0.1, 0.9);
+                const type = fireworkTypes[Math.floor(Math.random() * fireworkTypes.length)];
+                const launchSpeed = random(-12, -16);
+                const targetHeightFactor = random(0.15, 0.5);
+                fireworkSequence.push({ time: launchTime, x: xPos, type: type, launchSpeed: launchSpeed, targetHeightFactor: targetHeightFactor });
+            }
+            fireworkSequence.sort((a, b) => a.time - b.time);
+            console.log(`Generated ${fireworkSequence.length} firework events.`);
+            sequenceIndex = 0;
+        }
+
+        // --- 輔助函數 ---
+        function random(min, max) { return Math.random() * (max - min) + min; }
+        function randomInt(min, max) { return Math.floor(random(min, max + 1)); }
+        function randomColor(palette = colors) { return palette[Math.floor(Math.random() * palette.length)]; }
+        function getColors(type) {
+             let count = randomInt(1,3); let palette = colors;
+             if (type.includes('mono')) count = 1;
+             if (type.includes('multi')) count = randomInt(2, 4);
+             if (type.includes('rainbow')) return ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#8B00FF'];
+             if (type.includes('gold')) return ['#FFD700', '#FFA500', '#F0E68C'];
+             const shuffled = palette.slice().sort(() => 0.5 - Math.random());
+             return shuffled.slice(0, count);
+        }
+
+        // --- 粒子類別 ---
+        class Particle {
+             constructor(x, y, vx, vy, color, life, particleType = 'normal', options = {}) {
+                this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.color = color;
+                this.initialLife = life > 0 ? life : 0.1; this.life = this.initialLife; this.alpha = 1;
+                this.type = particleType; this.gravity = gravity * (options.gravityFactor || 1);
+                this.friction = options.friction || friction; this.strobeRate = options.strobeRate || 0.1;
+                this.strobeIntensity = options.strobeIntensity || 0.5; this.radius = options.radius || random(1.5, 2.5);
+                this.decay = random(0.01, 0.02) * (options.decayRate || 1);
+                if (this.decay * (16.67) >= this.life && this.life > 0) { this.decay = this.life / 20 ; }
+            }
+             update(deltaTime) {
+                 if (isNaN(deltaTime) || deltaTime <= 0) deltaTime = 16.67;
+                 const dt = deltaTime / 16.67;
+                 this.x += this.vx * dt; this.y += this.vy * dt; this.vy += this.gravity * dt;
+                 this.vx *= Math.pow(this.friction, dt); this.vy *= Math.pow(this.friction, dt);
+                 this.life -= this.decay * dt;
+                 if (this.type === 'strobe') {
+                     if (Math.random() < this.strobeRate) { this.alpha = random(1 - this.strobeIntensity, 1); }
+                     else { const baseAlpha = this.initialLife > 0 ? Math.max(0, this.life / (this.initialLife * 0.5)) : 0; this.alpha = baseAlpha; }
+                     this.alpha = Math.max(0, Math.min(1, this.alpha));
+                 } else { this.alpha = this.initialLife > 0 ? Math.max(0, this.life / this.initialLife) : 0; }
+                 this.alpha = Math.max(0, this.alpha);
+             }
+             draw() {
+                 if (!ctx) return; // 如果找不到畫布上下文，就不要畫
+                 ctx.globalAlpha = this.alpha; ctx.fillStyle = this.color; ctx.beginPath();
+                 ctx.arc(this.x, this.y, this.radius * this.alpha + 0.5, 0, Math.PI * 2); ctx.fill();
+             }
+             shouldRemove() { return this.life <= 0 || this.alpha <= 0.01; }
+        }
+
+        // --- 煙火類別 ---
+        class Firework {
+            constructor(startX, targetY, launchSpeed, type) {
+                this.startX = startX; this.targetHeight = targetY; this.type = type; this.exploded = false;
+                this.particles = []; this.rocket = { x: startX, y: vh, vx: random(-1, 1), vy: launchSpeed, alpha: 1, color: 'rgba(255,255,255,0.5)' };
+                this.trailParticles = []; this.explosionParams = this.getExplosionParams(type); this.explosionColors = getColors(type);
+            }
+            getExplosionParams(type) {
+                let p = { count: randomInt(80, 150), speed: random(3, 8), life: random(0.8, 1.8), particleType: 'normal', gravityFactor: 1, radius: random(1.5, 2.5), decayRate: 1, shape: 'sphere', angleRange: [0, Math.PI * 2] };
+                if (type.includes('willow')){p.count=randomInt(60,120);p.speed=random(1,4);p.life=random(2.0,3.5);p.gravityFactor=1.2;p.decayRate=0.8;p.radius=random(1,2);}
+                else if(type.includes('glitter')){p.count=randomInt(150,300);p.speed=random(4,9);p.life=random(0.3,0.8);p.decayRate=1.5;p.radius=random(0.8,1.5);}
+                else if(type.includes('strobe')){p.particleType='strobe';p.life=random(0.6,1.5);p.strobeRate=0.2;p.strobeIntensity=0.6;}
+                else if(type.includes('ring')){p.shape='ring';const s=Math.random()*Math.PI*2;const w=random(Math.PI*0.1,Math.PI*0.3);p.angleRange=[s,s+w];p.count=randomInt(100,180);p.speed=random(4,7);}
+                else if(type.includes('directional')){p.shape='directional';const d=Math.random()*Math.PI*2;const sp=random(Math.PI*0.3,Math.PI*0.8);p.angleRange=[d-sp/2,d+sp/2];p.speed=random(6,11);}
+                if(type.includes('compact')){p.speed=random(2,5);p.life=random(0.6,1.2);p.count=randomInt(60,100);}
+                if(type.includes('large')){p.speed=random(5,10);p.life=random(1.5,2.5);p.count=randomInt(120,200);}
+                return p;
+            }
+            update(deltaTime) {
+                const dt = deltaTime / 16.67;
+                if (!this.exploded) {
+                    this.rocket.x += this.rocket.vx*dt; this.rocket.y += this.rocket.vy*dt; this.rocket.vy += gravity*dt;
+                    if(Math.random()<0.5){this.trailParticles.push(new Particle(this.rocket.x,this.rocket.y,random(-0.3,0.3),random(-0.3,0.3),this.rocket.color,random(0.3,0.7),'normal',{radius:1.5,decayRate:1.8}));}
+                    if (this.rocket.y <= this.targetHeight || this.rocket.vy >= -1) { this.explode(); }
+                }
+                for(let i=this.particles.length-1;i>=0;i--){this.particles[i].update(deltaTime);if(this.particles[i].shouldRemove()){this.particles.splice(i,1);}}
+                for(let i=this.trailParticles.length-1;i>=0;i--){this.trailParticles[i].update(deltaTime);if(this.trailParticles[i].shouldRemove()){this.trailParticles.splice(i,1);}}
+            }
+            explode() {
+                if(this.exploded)return; this.exploded=true; this.rocket.alpha=0;
+                const ex=this.rocket.x; const ey=this.rocket.y; const p=this.explosionParams;
+                for(let i=0;i<p.count;i++){
+                    let a; if(p.shape==='sphere'){a=Math.random()*Math.PI*2;}else if(p.shape==='ring'){a=p.angleRange[0]+Math.random()*(p.angleRange[1]-p.angleRange[0]);}else if(p.shape==='directional'){a=p.angleRange[0]+Math.random()*(p.angleRange[1]-p.angleRange[0]);}else{a=Math.random()*Math.PI*2;}
+                    const sp=random(0.5,1.0)*p.speed*(Math.random()>0.9?1.5:1); const vx=Math.cos(a)*sp; const vy=Math.sin(a)*sp;
+                    const c=this.explosionColors.length>0?this.explosionColors[i%this.explosionColors.length]:randomColor(); const l=random(0.8,1.2)*p.life;
+                    this.particles.push(new Particle(ex,ey,vx,vy,c,l,p.particleType,{gravityFactor:p.gravityFactor,radius:p.radius,decayRate:p.decayRate,strobeRate:p.strobeRate,strobeIntensity:p.strobeIntensity}));
+                }
+                this.trailParticles.forEach(pt=>{pt.life*=0.5;});
+            }
+            draw() {
+                 if (!ctx) return;
+                 ctx.globalAlpha=0.6; this.trailParticles.forEach(p=>p.draw());
+                 ctx.globalAlpha=1; this.particles.forEach(p=>p.draw()); ctx.globalAlpha=1;
+            }
+            shouldRemove() { return this.exploded && this.particles.length === 0 && this.trailParticles.length === 0; }
+        }
+
+        // --- 主動畫循環 ---
+        function animate(currentTime) {
+             requestAnimationFrame(animate);
+             if (!ctx) return; // 如果沒有畫布上下文，停止動畫
+             if (!lastTime) lastTime = currentTime;
+             const deltaTime = currentTime - lastTime; lastTime = currentTime;
+             if (isNaN(deltaTime) || deltaTime <= 0 || deltaTime > 100) { return; }
+
+             if (soundEnabled) {
+                mainLoopTimer += deltaTime;
+                if (mainLoopTimer >= sequenceDuration) {
+                    console.log("循環播放..."); mainLoopTimer %= sequenceDuration; sequenceIndex = 0;
+                    if(bgMusic){try{bgMusic.currentTime=0;if(bgMusic.paused)bgMusic.play();}catch(e){console.warn("無法重置背景音樂:",e);}}
+                    if(fireworksSfxLoop){try{fireworksSfxLoop.currentTime=0;if(fireworksSfxLoop.paused)fireworksSfxLoop.play();}catch(e){console.warn("無法重置煙火音效:",e);}}
+                }
+                while (sequenceIndex < fireworkSequence.length && fireworkSequence[sequenceIndex].time <= mainLoopTimer) {
+                    const e = fireworkSequence[sequenceIndex]; const x = e.x*vw; const y = vh*e.targetHeightFactor;
+                    if(x>0&&x<vw){activeFireworks.push(new Firework(x,y,e.launchSpeed,e.type));} sequenceIndex++;
+                }
+             }
+
+             ctx.fillStyle = `rgba(0, 0, 0, ${trailLength / 100})`; ctx.globalCompositeOperation = 'source-over'; ctx.fillRect(0, 0, vw, vh);
+             ctx.globalCompositeOperation = 'lighter';
+             for(let i=activeFireworks.length-1;i>=0;i--){activeFireworks[i].update(deltaTime);activeFireworks[i].draw();if(activeFireworks[i].shouldRemove()){activeFireworks.splice(i,1);}}
+             ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        }
+
+        // --- 初始化聲音 ---
+        function initAudio() {
+            soundPrompt = document.getElementById('sound-prompt');
+            bgMusic = document.getElementById('bgMusic');
+            fireworksSfxLoop = document.getElementById('fireworksSfxLoop');
+            if(bgMusic){bgMusic.volume=1.0;console.log("背景音樂元素找到，音量設定為 1.0");}else{console.error("找不到背景音樂元素 #bgMusic");}
+            if(fireworksSfxLoop){fireworksSfxLoop.volume=1.0;console.log("煙火音效元素找到，音量設定為 1.0");}else{console.error("找不到煙火音效元素 #fireworksSfxLoop");}
+            if(soundPrompt) { // 加上檢查，避免 soundPrompt 不存在時出錯
+                 soundPrompt.addEventListener('click', enableSound, { once: true });
+            } else {
+                 console.warn("找不到 ID 為 'sound-prompt' 的元素，請檢查 HTML。將嘗試監聽 body 點擊。");
+                 // 備用方案：如果提示 div 找不到，就監聽整個 body 的點擊
+                 document.body.addEventListener('click', enableSound, { once: true });
+            }
+        }
+
+        // --- 啟用聲音的函數 ---
+        function enableSound() {
+             if(soundEnabled)return; console.log("聲音已由使用者互動啟用。"); soundEnabled=true;
+             if(soundPrompt) soundPrompt.style.display='none'; // 隱藏提示
+             const playPromises=[];
+             if(bgMusic){playPromises.push(bgMusic.play().catch(e => console.error("背景音樂播放失敗:", e)));} // 加上 catch 避免中斷 Promise.all
+             if(fireworksSfxLoop){playPromises.push(fireworksSfxLoop.play().catch(e => console.error("煙火音效播放失敗:", e)));}
+             Promise.all(playPromises)
+                .then(() => { console.log("背景音樂和煙火音效嘗試開始播放。"); mainLoopTimer=0; sequenceIndex=0; lastTime=performance.now(); console.log("主循環計時器已重置與聲音同步。"); })
+                .catch(e => { console.error("至少一個聲音播放 Promise 被拒絕 (可能是因為播放失敗):", e); mainLoopTimer=0; sequenceIndex=0; lastTime=performance.now(); console.warn("儘管聲音播放可能失敗，主循環計時器仍已重置。"); });
+        }
+
+        // --- 重設畫布大小函數 ---
+        function resizeCanvas() {
+            if (!canvas) return; // 如果找不到畫布，不執行
+            vw = canvas.width = window.innerWidth; vh = canvas.height = window.innerHeight;
+        }
+
+        // --- 初始化設定 ---
+        function setup() {
+             resizeCanvas();
+             if (!ctx) { // 如果無法取得畫布上下文，顯示錯誤訊息並停止
+                 document.body.innerHTML = '<p style="color:red; text-align:center; padding-top: 50px; font-size:1.5em;">錯誤：無法初始化 Canvas！<br>可能是因為 HTML 中缺少 ID 為 "fireworksCanvas" 的 &lt;canvas&gt; 元素。</p>';
+                 return;
+             }
+             generateSequence();
+             initAudio();
+             requestAnimationFrame(animate);
+             console.log("設定完成，等待使用者互動以啟用聲音。");
+        }
+
+        // --- 事件監聽 (窗口大小改變) ---
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+             resizeTimeout = setTimeout(() => {
+                console.log("窗口大小改變 - 重新生成序列..."); resizeCanvas(); generateSequence();
+                if(soundEnabled){ mainLoopTimer=0; lastTime=performance.now(); sequenceIndex=0;
+                if(bgMusic&&!bgMusic.paused){bgMusic.currentTime=0;} if(fireworksSfxLoop&&!fireworksSfxLoop.paused){fireworksSfxLoop.currentTime=0;} }
+             }, 500);
+        });
+
+        // 啟動！
+        setup();
+    </script>
+
+</body>
+</html>
